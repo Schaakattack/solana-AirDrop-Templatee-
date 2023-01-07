@@ -1,0 +1,104 @@
+use solana_sdk::{
+    account_info::AccountInfo,
+    account_utils::StateMutability,
+    pubkey::Pubkey,
+};
+
+#[derive(Debug, PartialEq)]
+pub struct Airdrop {
+    // The owner of the contract
+    pub owner: Pubkey,
+    // The number of tokens to be airdropped
+    pub tokens: u64,
+}
+
+impl Airdrop {
+    // Constructor function to create a new Airdrop instance
+    pub fn new(owner: Pubkey, tokens: u64) -> Self {
+        Self { owner, tokens }
+    }
+
+    // Function to update the number of tokens in the airdrop
+    pub fn set_tokens(&mut self, tokens: u64) {
+        self.tokens = tokens;
+    }
+
+    // Main function that is called when the contract is executed on the Solana network
+    pub fn process_instruction(&self, _program_id: &Pubkey, accounts: &[AccountInfo]) -> Result<(), String> {
+        // Check that the instruction is being signed by the contract owner
+        let signer = &accounts[0].signed;
+        if signer != &self.owner {
+            return Err("Unauthorized".to_string());
+        }
+
+        // Check that the correct number of accounts are present in the instruction
+        if accounts.len() != 3 {
+            return Err("Invalid number of accounts".to_string());
+        }
+
+        // Check that the first account is the contract account
+        let contract_account = &accounts[0];
+        if contract_account.is_signer {
+            return Err("Invalid contract account".to_string());
+        }
+        if contract_account.owner != _program_id {
+            return Err("Invalid contract owner".to_string());
+        }
+        if contract_account.lamports < self.tokens {
+            return Err("Not enough tokens in contract account".to_string());
+        }
+
+        // Check that the second account is the receiver account
+        let receiver_account = &accounts[1];
+        if !receiver_account.is_signer {
+            return Err("Invalid receiver account".to_string());
+        }
+        if receiver_account.lamports != 0 {
+            return Err("Receiver account must be empty".to_string());
+        }
+        if receiver_account.data.len() > 0 {
+            return Err("Receiver account must have no data".to_string());
+        }
+        if receiver_account.owner != signer {
+            return Err("Invalid receiver account owner".to_string());
+        }
+
+        // Check that the third account is a dummy account CHANGE BEFIRE USE!
+        let dummy_account = &accounts[2];
+        if dummy_account.is_signer {
+            return Err("Invalid dummy account".to_string());
+        }
+        if dummy_account.lamports != 0 {
+            return Err("Dummy account must be empty".to_string());
+        }
+        if dummy_account.data.len() > 0 {
+            return Err("Dummy account must have no data".to_string());
+        }
+        if dummy_account.owner != signer {
+            return Err("Invalid dummy account owner".to_string());
+        }
+
+        // Transfer the tokens from the contract account to the receiver account
+        contract_account.lamports -= self.tokens;
+        receiver_account.lamports += self.tokens;
+
+        Ok(())
+    }
+}
+
+solana_sdk::declare_program!(
+    "AirdropProgram",
+    solana_sdk::bpf_loader::id(),
+    Airdrop::process_instruction
+);
+
+
+///To create a new airdrop contract with a specific number of tokens, you can use the Airdrop::new constructor function, like this:
+
+/// let owner = Pubkey::new_rand();
+/// let tokens = 1000;
+/// let airdrop = Airdrop::new(owner, tokens);
+
+/// actually drop by
+/// let result = airdrop.process_instruction(&program_id, &accounts);
+
